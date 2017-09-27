@@ -7,15 +7,15 @@ import (
 )
 
 type HttpServer struct {
-	Addr string
-
 	listener net.Listener
 	stopC    chan error
+
+	conf *HttpServerConf
 }
 
-func NewHttpServer(addr string) *HttpServer {
+func NewHttpServer(conf *HttpServerConf) *HttpServer {
 	return &HttpServer{
-		Addr:  addr,
+		conf:  conf,
 		stopC: make(chan error),
 	}
 }
@@ -25,7 +25,7 @@ func (s *HttpServer) Open() <-chan error {
 	http.HandleFunc("/addShard", s.AddShard)
 
 	// 启动http服务
-	l, err := net.Listen("tcp", s.Addr)
+	l, err := net.Listen("tcp", s.conf.ListenAddr)
 	if err != nil {
 		s.stopC <- err
 		return s.stopC
@@ -40,6 +40,10 @@ func (s *HttpServer) Open() <-chan error {
 func (s *HttpServer) Shutdown() {
 	s.listener.Close()
 	close(s.stopC)
+}
+
+func (s *HttpServer) SetConf(conf *HttpServerConf) {
+	s.conf = conf
 }
 
 func (s *HttpServer) AddShard(w http.ResponseWriter, r *http.Request) {

@@ -45,11 +45,6 @@ func (s *Shard) AddMember(addr net.Addr) error {
 }
 
 ///////////////////////////////////////////////////////
-type ShardManagerConf struct {
-	// 元数据保存的本地磁盘文件
-	MetaPath string
-}
-
 type ShardManager struct {
 	shards map[int64]*Shard
 
@@ -89,6 +84,10 @@ func (m *ShardManager) Add(s *Shard) error {
 	}
 	m.shards[s.Key] = s
 	return nil
+}
+
+func (m *ShardManager) SetConf(conf *ShardManagerConf) {
+	m.conf = conf
 }
 
 ///////////////////////////////////////////////////////

@@ -8,11 +8,6 @@ import (
 // 默认的分区个数为4096
 var partitionSize int64 = 4096
 
-type SeriesKeyShardMappingConf struct {
-	// 元数据保存的磁盘文件
-	MetaPath string
-}
-
 type SeriesKeyShardMapping struct {
 	// 将不同的哈希值分散存储到一个环形buffer里
 	partitions []*Partition
@@ -59,6 +54,10 @@ func (m *SeriesKeyShardMapping) Find(seriesKey int64) (*Shard, error) {
 
 func (m *SeriesKeyShardMapping) Delete(seriesKey int64) error {
 	return m.partitions[seriesKey%partitionSize].del(seriesKey)
+}
+
+func (m *SeriesKeyShardMapping) SetConf(conf *SeriesKeyShardMappingConf) {
+	m.conf = conf
 }
 
 /////////////////////////////////////////////////////////////////
