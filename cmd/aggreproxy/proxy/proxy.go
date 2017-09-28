@@ -1,17 +1,15 @@
 package proxy
 
-import (
-	"log"
-	"os"
-)
+import "Aggregator/log"
 
 type Proxy struct {
 	// 元数据
 	sksm *SeriesKeyShardMapping
 	sm   *ShardManager
 
-	// http server
-	httpS *HttpServer
+	// services
+	httpS           *HttpServer
+	shardKeepAliveS *ShardKeepAlive
 
 	conf *Conf
 	log  *log.Logger
@@ -22,12 +20,8 @@ type Proxy struct {
 
 func New() *Proxy {
 	return &Proxy{
-		sksm:  NewSeriesKeyShardMapping(nil),
-		sm:    NewShardManager(nil),
-		httpS: NewHttpServer(nil),
-
 		conf:      &Conf{},
-		log:       log.New(os.Stdout, "Proxy ", log.LstdFlags|log.Lshortfile),
+		log:       log.New(),
 		stopC:     make(chan error),
 		isStopped: false,
 	}
@@ -35,38 +29,51 @@ func New() *Proxy {
 
 func (p *Proxy) Run() {
 	var err error
+	var ok bool
 
+	// local conf
 	if err = p.conf.Load(); err != nil {
-		p.log.Printf("Load conf err, %v\n", err)
+		p.log.Error("Load conf err, %v", err)
 		return
 	}
-	p.sksm.SetConf(p.conf.sksmConf)
-	p.sm.SetConf(p.conf.smConf)
-	p.httpS.SetConf(p.conf.httpServerConf)
-	p.log.Printf("Load conf OK")
+	p.log.Info("Load conf OK")
 
+	// load meta data from local
+	p.sksm = NewSeriesKeyShardMapping(p.conf.sksmConf)
 	if err = p.sksm.Load(); err != nil {
-		p.log.Printf("Load SeriesKeyShardMapping err, %v\n", err)
+		p.log.Error("Load SeriesKeyShardMapping err, %v", err)
 		return
 	}
-	p.log.Printf("Load SeriesKeyShardMapping OK")
+	p.log.Info("Load SeriesKeyShardMapping OK")
 
+	p.sm = NewShardManager(p.conf.smConf)
 	if err = p.sm.Load(); err != nil {
-		p.log.Printf("Load shard err, %v\n", err)
+		p.log.Error("Load shard err, %v", err)
 		return
 	}
-	p.log.Printf("Load shard OK")
+	p.log.Info("Load shard OK")
 
-	// start http server for controlling
+	// run services
+	p.httpS = NewHttpServer(p)
 	stopHttpC := p.httpS.Open()
-	p.log.Printf("Start http server on %s\n", p.conf.httpServerConf.ListenAddr)
+	p.log.Info("Start http server on %s", p.conf.httpServerConf.ListenAddr)
+
+	p.shardKeepAliveS = NewShardKeepAlive(p)
+	stopShardKeepAliveC := p.shardKeepAliveS.Open()
+	p.log.Info("Start shard keepalive service")
 
 	select {
-	case err, ok := <-stopHttpC:
+	case err, ok = <-stopHttpC:
 		if err != nil && ok {
-			p.log.Printf("Http server err, %v\n", err)
+			p.log.Error("Http server err, %v", err)
 		} else {
-			p.log.Printf("Shutdown http server proactively\n")
+			p.log.Info("Shutdown http server proactively")
+		}
+	case err, ok = <-stopShardKeepAliveC:
+		if err != nil && ok {
+			p.log.Error("Shard keepalive service err, %v", err)
+		} else {
+			p.log.Info("Shutdown shard keepalive service proactively")
 		}
 	}
 

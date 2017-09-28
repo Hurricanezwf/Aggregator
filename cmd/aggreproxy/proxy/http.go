@@ -1,7 +1,9 @@
 package proxy
 
 import (
-	"fmt"
+	"Aggregator/log"
+	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 )
@@ -10,17 +12,24 @@ type HttpServer struct {
 	listener net.Listener
 	stopC    chan error
 
+	p *Proxy
+
 	conf *HttpServerConf
+
+	log *log.Logger
 }
 
-func NewHttpServer(conf *HttpServerConf) *HttpServer {
+func NewHttpServer(p *Proxy) *HttpServer {
 	return &HttpServer{
-		conf:  conf,
 		stopC: make(chan error),
+		p:     p,
+		log:   log.New(),
 	}
 }
 
 func (s *HttpServer) Open() <-chan error {
+	s.conf = s.p.conf.httpServerConf
+
 	// 注册路由
 	http.HandleFunc("/addShard", s.AddShard)
 
@@ -47,5 +56,40 @@ func (s *HttpServer) SetConf(conf *HttpServerConf) {
 }
 
 func (s *HttpServer) AddShard(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "hello\n")
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte("405 - method not allowed"))
+		return
+	}
+	defer r.Body.Close()
+
+	var req AddShardReq
+	var resp AddShardResp
+	err := func() error {
+		var err error
+		dec := json.NewDecoder(r.Body)
+		if err = dec.Decode(&req); err != nil {
+			return err
+		}
+
+		if len(req.Addrs) <= 0 {
+			return errors.New("No shard addrs found")
+		}
+
+		sd := &Shard{}
+		if err = sd.SetMember(req.Addrs); err != nil {
+			return err
+		}
+		if err = s.p.sm.Add(sd); err != nil {
+			return err
+		}
+
+		return nil
+	}()
+
+	if err != nil {
+		resp.Code = 1
+	}
+
+	s.log.Info("[/addShard] - Req: %+v, Resp: %+v, err: %v", req, resp, err)
 }
