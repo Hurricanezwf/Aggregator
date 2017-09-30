@@ -1,16 +1,18 @@
 package proxy
 
 type Conf struct {
-	sksmConf       *SeriesKeyShardMappingConf
-	smConf         *ShardManagerConf
+	metaConf       *MetaConf
 	httpServerConf *HttpServerConf
 }
 
 func (c *Conf) Load() error {
-	c.sksmConf = &SeriesKeyShardMappingConf{MetaPath: "./meta/sksm"}
-	c.smConf = &ShardManagerConf{MetaPath: "./meta/sm"}
 	c.httpServerConf = &HttpServerConf{ListenAddr: "localhost:10000"}
 	return nil
+}
+
+type MetaConf struct {
+	sksmConf *SeriesKeyShardMappingConf
+	smConf   *ShardManagerConf
 }
 
 type SeriesKeyShardMappingConf struct {
